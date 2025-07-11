@@ -55,6 +55,15 @@ def get_online_data():
         'tracks': tracks,
     }
 
+# google sheets bug: turns int fields into floats, parsed as X.0 instead of X
+def strip_trailing_dot_zero(value):
+    if value == None:
+        return None
+    s = str(value)
+    if s.endswith('.0'):
+        return s[:-2]  # remove the '.0' suffix
+    return s
+
 def load_changes(filename='./changes.xlsx') -> dict:
     """
     Reads Excel file with checkbox (boolean) in column A and string in column B.
@@ -67,7 +76,7 @@ def load_changes(filename='./changes.xlsx') -> dict:
     for row in ws.iter_rows(min_row=2, max_col=11):
         like_on = row[0].value
         artist_id = row[1].value
-        album_id = row[2].value
+        album_id = strip_trailing_dot_zero(row[2].value)
         track_id = row[3].value
         timestamp = row[4].value
         artist = row[5].value
@@ -156,7 +165,7 @@ def update_changes(online_data, changes) -> list:
                 'timestamp': album.timestamp,
                 'like_on': True,
                 'artist': album.album.artists[0].name if album.album.artists else '',
-                'genre': genre,
+                'genre': genre if genre else '',
             })
 
     # Add missing tracks
@@ -177,20 +186,6 @@ def update_changes(online_data, changes) -> list:
             })
 
     print("New tracks: %d" % new_tracks)
-
-    changes = sorted(
-        changes,
-        key=lambda x: (
-            0 if not x.get('track_id', '') else 1,
-            0 if is_russian_genre(x.get('genres', '')) else 1,
-            0 if is_russian_genre(x.get('genre', '')) else 1,
-            1 if is_english(x.get('artist', '')) else 0,
-            x.get('artist', '').lower(),
-            0 if not x.get('album_id', '') else 1,
-            x.get('genres', '').lower(),
-            x.get('genre', '').lower()
-        )
-    )
 
     # Fetch track information
     track_ids = [i.get('track_id') for i in changes if i.get('track_id') and (
@@ -222,10 +217,9 @@ def update_changes(online_data, changes) -> list:
         if c['track_id']:
             track = next((t for t in tracks if t.id == c['track_id']), None)
             if track:
-                c['artist_id'] = track.artists[0].id
-                c['album_id'] = track.albums[0].id
+                c['artist_id'] = str(track.artists[0].id)
+                c['album_id'] = str(track.albums[0].id)
                 c['track'] = track.title if not track.version else '%s (%s)' % (track.title, track.version)
-                c['album_id'] = track.albums[0].id
         if c.get('album_id'):
             album = next((a for a in albums if a.id == c['album_id']), None)
             if not album:
@@ -233,8 +227,8 @@ def update_changes(online_data, changes) -> list:
                 if track:
                     album = track.albums[0]
             if album:
-                c['album'] = album.title
-                c['genre'] = album.genre
+                c['album'] = album.title if album.title else ''
+                c['genre'] = album.genre if album.genre else ''
                 c['year'] = next((y for y in ( album.original_release_year, album.year, album.release_date[:4] if album.release_date else '') if y), None)
         if c.get('artist_id'):
             artist = next((a.artists[0] for a in albums if a.artists and a.artists[0].id == c['artist_id']), None)
@@ -243,12 +237,24 @@ def update_changes(online_data, changes) -> list:
             if not artist:
                 artist = next((a.artist for a in online_data['artists'] if a.artist.id == c['artist_id']), None)
             if artist:
-                c['artist'] = artist.name
+                c['artist'] = artist.name if artist.name else ''
                 c['genres'] = ', '.join(artist.genres)
 
         changes[idx] = c
-        
-    return changes
+
+    return sorted(
+        changes,
+        key=lambda x: (
+            0 if not x.get('track_id', '') else 1,
+            0 if is_russian_genre(x.get('genres', '')) else 1,
+            0 if is_russian_genre(x.get('genre', '')) else 1,
+            1 if is_english(x.get('artist', '')) else 0,
+            x.get('artist', '').lower(),
+            0 if not x.get('album_id', '') else 1,
+            x.get('genres', '').lower(),
+            x.get('genre', '').lower()
+        )
+    )
 
 def dump_changes(changes, filename='./changes.xlsx'):
     """
@@ -289,4 +295,66 @@ def dump_changes(changes, filename='./changes.xlsx'):
     wb.save(filename)
 
 def set_likes_changes(online_data, changes, filename='./changes.xlsx'):
-    pass
+
+    add_artists = []
+    add_albums = []
+    add_tracks = []
+
+    rm_artists = []
+    rm_albums = []
+    rm_tracks = []
+
+    off_changes = [c for c in changes if not c['like_on']]
+    on_changes = [c for c in changes if c['like_on']]
+
+    print('Like on ', len(on_changes))
+    print('Like off', len(off_changes))
+
+    for c in off_changes:
+        if c.get('track_id'):
+            track = next((t for t in online_data['tracks'] if str(t.id) == c['track_id']), None)
+            if track:
+                rm_tracks.append(c['track_id'])
+        elif c.get('album_id'):
+            album = next((a for a in online_data['albums'] if str(a.album.id) == str(c['album_id'])), None)
+            if album:
+                rm_albums.append(c['album_id'])
+        elif c.get('artist_id'):
+            artist = next((a for a in online_data['artists'] if str(a.artist.id) == c['artist_id']), None)
+            if artist:
+                rm_artists.append(c['artist_id'])
+
+    for c in on_changes:
+        if c.get('track_id'):
+            track = next((t for t in online_data['tracks'] if str(t.id) == c['track_id']), None)
+            if not track:
+                add_tracks.append(c['track_id'])
+        elif c.get('album_id'):
+            album = next((a for a in online_data['albums'] if str(a.album.id) == str(c['album_id'])), None)
+            if not album:
+                add_albums.append(c['album_id'])
+        elif c.get('artist_id'):
+            artist = next((a for a in online_data['artists'] if str(a.artist.id) == c['artist_id']), None)
+            if not artist:
+                add_artists.append(c['artist_id'])
+
+    print('Summary of likes to change online:')
+    print('Remove likes: artists %d albums %d tracks %d' % (len(rm_artists), len(rm_albums), len(rm_tracks)))
+    print('Add likes:    artists %d albums %d tracks %d' % (len(add_artists), len(add_albums), len(add_tracks)))
+
+    if rm_tracks:
+        client.users_likes_tracks_remove(track_ids=rm_tracks)
+    if rm_albums:
+        client.users_likes_albums_remove(album_ids=rm_albums)
+    if rm_artists:
+        client.users_likes_artists_remove(artist_ids=rm_artists)
+
+    if add_tracks:
+        client.users_likes_tracks_add(track_ids=add_tracks)
+    if add_albums:
+        client.users_likes_albums_add(album_ids=add_albums)
+    if add_artists:
+        client.users_likes_artists_add(artist_ids=add_artists)
+
+    print('Indicates no error. Don\'t forget to update online_data to sync the changes')
+
