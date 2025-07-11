@@ -14,16 +14,12 @@ logging.basicConfig(
 token = open('token.txt').read().rstrip('\n')
 client = Client(token, language='en').init()
 
-print('Session OK')
-
-
 def is_english(text: str) -> bool:
     if not text:
         return False
     # This regex matches any non-English character (outside basic Latin ranges)
     # Adjust pattern to allow spaces and basic punctuation if needed
     return not bool(re.findall(r"[^\u0000-\u007F]+", text))
-
 
 def is_russian_genre(text: str) -> bool:
     if not text:
@@ -59,7 +55,7 @@ def get_online_data():
         'tracks': tracks,
     }
 
-def load_changes(filename='./todo.xlsx') -> dict:
+def load_changes(filename='./changes.xlsx') -> dict:
     """
     Reads Excel file with checkbox (boolean) in column A and string in column B.
     Returns list of dicts: [{False: "string1"}, {True: "string2"}, ...]
@@ -115,27 +111,10 @@ def load_changes(filename='./todo.xlsx') -> dict:
     
     return changes
 
-def dump_changes(online_data, changes, filename='./todo.xlsx'):
+def update_changes(online_data, changes) -> list:
     """
-    Writes the changes list (list of dicts) back to Excel file.
-    Adds one extra row at the top with hardcoded checkbox and string.
-    Each row: checkbox (boolean) in column A, string in column B.
+    Populate changes with missing information from online_data (new tracks, changed info)
     """
-    wb = Workbook()
-    ws = wb.active
-
-    # Header row
-    ws.cell(row=1, column=1, value='like')
-    ws.cell(row=1, column=2, value='artist_id')
-    ws.cell(row=1, column=3, value='album_id')
-    ws.cell(row=1, column=4, value='track_id')
-    ws.cell(row=1, column=5, value='like_time')
-    ws.cell(row=1, column=6, value='artist')
-    ws.cell(row=1, column=7, value='genres')
-    ws.cell(row=1, column=8, value='album')
-    ws.cell(row=1, column=9, value='track')
-    ws.cell(row=1, column=10, value='year')
-    ws.cell(row=1, column=11, value='genre')
 
     # Add missing artists
     for artist in online_data.get('artists'):
@@ -256,7 +235,7 @@ def dump_changes(online_data, changes, filename='./todo.xlsx'):
             if album:
                 c['album'] = album.title
                 c['genre'] = album.genre
-                c['year'] = album.year
+                c['year'] = next((y for y in ( album.original_release_year, album.year, album.release_date[:4] if album.release_date else '') if y), None)
         if c.get('artist_id'):
             artist = next((a.artists[0] for a in albums if a.artists and a.artists[0].id == c['artist_id']), None)
             if not artist:
@@ -268,6 +247,30 @@ def dump_changes(online_data, changes, filename='./todo.xlsx'):
                 c['genres'] = ', '.join(artist.genres)
 
         changes[idx] = c
+        
+    return changes
+
+def dump_changes(changes, filename='./changes.xlsx'):
+    """
+    Writes the changes list (list of dicts) back to Excel file.
+    Adds one extra row at the top with hardcoded checkbox and string.
+    Each row: checkbox (boolean) in column A, string in column B.
+    """
+    wb = Workbook()
+    ws = wb.active
+
+    # Header row
+    ws.cell(row=1, column=1, value='like')
+    ws.cell(row=1, column=2, value='artist_id')
+    ws.cell(row=1, column=3, value='album_id')
+    ws.cell(row=1, column=4, value='track_id')
+    ws.cell(row=1, column=5, value='like_time')
+    ws.cell(row=1, column=6, value='artist')
+    ws.cell(row=1, column=7, value='genres')
+    ws.cell(row=1, column=8, value='album')
+    ws.cell(row=1, column=9, value='track')
+    ws.cell(row=1, column=10, value='year')
+    ws.cell(row=1, column=11, value='genre')
 
     # Write the changes
     for row_idx, change in enumerate(changes, start=2):
@@ -285,5 +288,5 @@ def dump_changes(online_data, changes, filename='./todo.xlsx'):
 
     wb.save(filename)
 
-def apply_changes(online_data, changes, filename='./todo.xlsx'):
+def set_likes_changes(online_data, changes, filename='./changes.xlsx'):
     pass
