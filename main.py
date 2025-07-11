@@ -162,8 +162,8 @@ def dump_changes(online_data, changes, filename='./todo.xlsx'):
     # Merge missing albums
     for album in online_data.get('albums'):
         album_id = album.album.id
-        genre = ', '.join(album.album.genre) if album.album.genre else ''
-        title = album.album.title if album.album.title else ''
+        genre = album.album.genre
+        title = album.album.title
 
         match = next(
             (d for d in changes if d['album_id'] == album_id and not d['track_id']),
@@ -178,26 +178,31 @@ def dump_changes(online_data, changes, filename='./todo.xlsx'):
                 'like_on': True,
                 'artist': album.album.artists[0].name if album.album.artists else '',
                 'genres': '',
-                'genre': genre
+                'genre': genre,
             })
 
     # Merge missing tracks
+    new_tracks = 0
     for track in online_data.get('tracks'):
         match = next(
             (d for d in changes if d['track_id'] == track.id),
             None
         )
         if not match:
+            new_tracks +=1
             changes.append({
                 'artist_id': None,
                 'album_id': track.album_id,
                 'track_id': track.id,
                 'timestamp': track.timestamp,
                 'like_on': True,
+                'track': '',
                 'artist': '',
                 'genres': '',
                 'genre': ''
             })
+
+    print("New tracks: %d" % new_tracks)
 
     # Example: sorting changes by 'name' and then by 'genres'
     changes = sorted(
@@ -214,17 +219,104 @@ def dump_changes(online_data, changes, filename='./todo.xlsx'):
         )
     )
 
+    # Fetch track title information
+    track_ids = [i.get('track_id') for i in changes if i.get('track_id') and (
+        not i.get('track') 
+        or not i.get('artist')
+    )]
+    track_ids = list(dict.fromkeys(track_ids))
+    tracks = []
+    if track_ids:
+        print('Need extra information for %d tracks' % len(track_ids))
+        tracks = client.tracks(with_positions=False, track_ids=track_ids)
+
+    # Fetch album information
+    album_ids = [
+        i.get('album_id')
+        for i in changes
+        if not i.get('track_id') and i.get('album_id')
+        and not any(a.album.id == i.get('album_id') for a in online_data.get('albums'))
+        and not any(track_in_album for track_in_album in tracks if any(a.id == i.get('album_id') for a in track_in_album.albums))
+    ]
+    album_ids = list(dict.fromkeys(album_ids))
+    albums = []
+    if album_ids:
+        print('Need extra information for %d albums' % len(album_ids))
+        albums = client.albums(album_ids=album_ids)
+
+    # Substitute incomplete file data (changes) with new online data (albums, tracks)
+    for c in changes:
+        if c.get('artist_id'):
+            if not c.get('artist'):
+                artists = [a.artists[0] for a in albums if a.artists and a.artists[0].id == c['artist_id']]
+                c['artist'] = artists[0].name
+            if not c.get('genres'):
+                artists = [a.artists[0] for a in albums if a.artists and a.artists[0].id == c['artist_id']]
+                c['genres'] = ', '.join(artists[0].genres) if artists and artists[0].genres else ''
+        if c.get('album_id'):
+            if not c.get('album'):
+                track = next((t for t in tracks if t.id == c['track_id']), None)
+                if track:
+                    c['album'] = track.albums[0].title if track.albums else ''
+            if not c.get('genre'):
+                track = next((t for t in tracks if t.id == c['track_id']), None)
+                if track:
+                    c['genre'] = track.albums[0].genre if track.albums else ''
+
+    # fixme: by track: artist, genres, year
+
     def album_title(change):
+        if change.get('album'):
+            return change['album']
         if change['album_id']:
-            return 'album_title'
+            for a in online_data.get('albums'):
+                if a.album.id == change['album_id']:
+                    return a.album.title
+            for a in albums:
+                if a.id == change['album_id']:
+                    return a.title
+            for t in tracks:
+                for a in t.albums:
+                    if a.id == change['album_id']:
+                        return a.title
 
     def track_title(change):
+        if change.get('track'):
+            return change['track']
         if change['track_id']:
-            return 'track_title'
+            for t in tracks:
+                if t.id == change['track_id']:
+                    return '%s (%s)' % (t.title, t.version) if t.version else t.title
 
     def album_year(change):
+        if change.get('year'):
+            return change['year']
         if change['album_id']:
-            return 'album_year'
+            for a in online_data.get('albums'):
+                if a.album.id == change['album_id']:
+                    return a.album.year
+            for a in albums:
+                if a.id == change['album_id']:
+                    return a.year
+            for t in tracks:
+                for a in t.albums:
+                    if a.id == change['album_id']:
+                        return a.year
+
+    def album_genre(change):
+        if change.get('genre'):
+            return change['genre']
+        if change['album_id']:
+            for a in online_data.get('albums'):
+                if a.album.id == change['album_id']:
+                    return a.album.genre
+            for a in albums:
+                if a.id == change['album_id']:
+                    return a.genre
+            for t in tracks:
+                for a in t.albums:
+                    if a.id == change['album_id']:
+                        return a.genre
 
     # Write the changes
     for row_idx, change in enumerate(changes, start=2):
@@ -238,6 +330,7 @@ def dump_changes(online_data, changes, filename='./todo.xlsx'):
         ws.cell(row=row_idx, column=8, value=album_title(change))
         ws.cell(row=row_idx, column=9, value=track_title(change))
         ws.cell(row=row_idx, column=10, value=album_year(change))
+        ws.cell(row=row_idx, column=11, value=album_genre(change))
 
     wb.save(filename)
 
