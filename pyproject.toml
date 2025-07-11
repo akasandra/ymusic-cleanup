@@ -6,3 +6,5 @@ description = ""
 [tool.poetry.dependencies]
 python = ">=3.8,<4.0"
 yandex-music = "^2.2.0"
+ipykernel = "^6.29.5"
+openpyxl = "^3.1.5"
