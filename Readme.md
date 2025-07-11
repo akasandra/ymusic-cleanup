@@ -7,7 +7,7 @@ Status: Done
 Пришлось сделать, чтобы поточнее настроить работу рекомендаций/vibe, убрать много лайков.
 
 Использование:
- 1. Получить токен из браузера https://github.com/MarshalX/yandex-music-api
+ 1. Получить токен из браузера https://github.com/MarshalX/yandex-music-api/discussions/513
  2. Сохранить в `token.txt`
  3. poetry install
  4. Use `poetry env path` as Jupyter Kernel
