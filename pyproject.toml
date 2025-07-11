@@ -1,0 +1,8 @@
+[tool.poetry]
+name="ymusic_cleanup"
+version = "0.1.0"
+description = ""
+
+[tool.poetry.dependencies]
+python = ">=3.8,<4.0"
+yandex-music = "^2.2.0"
