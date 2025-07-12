@@ -9,7 +9,7 @@ def iso_to_utc_timestamp(iso_str: str) -> int:
     # Return Unix timestamp as int
     return int(dt_utc.timestamp())
 
-# google sheets bug: turns int fields into floats, parsed as X.0 instead of X
+# google sheets/etc auto formatting bug: turns int fields into floats, parsed as X.0 instead of X
 def strip_trailing_dot_zero(value) -> str:
     if value == None:
         return None
