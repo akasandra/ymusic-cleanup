@@ -24,7 +24,7 @@ def is_english(text: str) -> bool:
 def is_russian_genre(text: str) -> bool:
     if not text:
         return False
-    return 'rus' in text or 'phonk' in text
+    return 'rus' in text or 'phonk' in text or 'local' in text
 
 def get_online_data():
     
