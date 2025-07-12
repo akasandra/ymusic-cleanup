@@ -1,5 +1,4 @@
-token.txt
-todo.xlsx
 *.pyc
 __pycache__
+token.txt
 changes.xlsx
