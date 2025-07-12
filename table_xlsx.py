@@ -9,6 +9,14 @@ def iso_to_utc_timestamp(iso_str: str) -> int:
     # Return Unix timestamp as int
     return int(dt_utc.timestamp())
 
+def iso_to_utc_year(iso_str: str) -> int:
+    # Parse ISO 8601 string (Python 3.8 requires replacing 'Z' with '+00:00' if present)
+    dt = datetime.fromisoformat(iso_str.replace('Z', '+00:00'))
+    # Convert to UTC timezone if not already UTC
+    dt_utc = dt.astimezone(timezone.utc)
+    # Return year component
+    return dt_utc.year
+
 # google sheets/etc auto formatting bug: turns int fields into floats, parsed as X.0 instead of X
 def strip_trailing_dot_zero(value) -> str:
     if value == None:

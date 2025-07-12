@@ -2,7 +2,7 @@
 import re
 from yandex_music import Client
 from datetime import datetime, timezone
-from table_xlsx import XlsxFileDriver as AbstractTableDriver, iso_to_utc_timestamp
+from table_xlsx import XlsxFileDriver as AbstractTableDriver, iso_to_utc_timestamp, iso_to_utc_year
 
 # Allowed characters:
 # - Basic Latin letters (A-Z, a-z)
@@ -209,8 +209,13 @@ class Worker:
                 c['genres'] = ', '.join(artist.genres) if artist.genres else ''
 
             if album and not c.get('album'):
-                year_variants = (album.original_release_year, album.year, album.release_date[:4] if album.release_date else '')
+                
+                release_date_year = None
+                if album.release_date:
+                    release_date_year = iso_to_utc_year(album.release_date)
+                year_variants = (album.original_release_year, album.year, release_date_year)
                 c['year'] = next((str(y) for y in year_variants if y), '')
+
                 c['genre'] = album.genre if album.genre else ''
                 c['album'] = album.title if album.title else ''
                 if album.version:
