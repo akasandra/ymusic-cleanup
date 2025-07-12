@@ -171,8 +171,7 @@ def update_changes(online_data, changes) -> list:
     new_albums = 0
     new_artists = 0
 
-    # FIXME: not picking up re-enabled likes from online. will un-do the re-set likes! :()
-    select_likes_after_time = lambda key: (i for i in online_data[key] if iso_to_utc_timestamp(i.timestamp) <= changes_max_time)
+    select_likes_after_time = lambda key: (i for i in online_data[key] if iso_to_utc_timestamp(i.timestamp) >= changes_max_time)
 
     off_changes = [c for c in changes if not c['like_on']]
 
