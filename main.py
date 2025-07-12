@@ -132,7 +132,7 @@ def update_changes(online_data, changes) -> list:
         name = artist.artist.name if artist.artist.name else ''
 
         match = next(
-            (d for d in changes if d['artist_id'] == artist_id and not d['track_id']),
+            (d for d in changes if d['artist_id'] == artist_id and not d['album_id'] and not d['track_id']),
             None
         )
         if not match:
