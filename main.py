@@ -11,22 +11,33 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
+# Allowed characters:
+# - Basic Latin letters (A-Z, a-z)
+# - Latin-1 Supplement letters with accents (À-ÿ, including ñ, á, é, etc.)
+# - Spaces and common punctuation: - ( ) . , & and apostrophe '
+# Note: \u00C0-\u00FF covers Latin-1 Supplement block (accented chars)
+# Apostrophe added as it is common in titles
+NON_LATIN_PATTERN = re.compile(r"[^A-Za-z\u00C0-\u00FF\s\-\(\)\.,&']+")
+
 token = open('token.txt').read().rstrip('\n')
 client = Client(token, language='en').init()
 
-def is_english(text: str) -> bool:
+def is_title_latin(text: str) -> bool:
     if not text:
         return False
-    # This regex matches any non-English character (outside basic Latin ranges)
-    # Adjust pattern to allow spaces and basic punctuation if needed
-    return not bool(re.findall(r"[^\u0000-\u007F]+", text))
+    # Return True if no disallowed characters found
+    return not bool(NON_LATIN_PATTERN.search(text))
 
-def is_russian_genre(text: str) -> bool:
+def is_genre_russian(text: str) -> bool:
     if not text:
         return False
     return 'rus' in text or 'phonk' in text or 'local' in text
 
-def get_online_data():
+def get_online_data() -> dict:
+    """
+    Use API to read all liked tracks, albums or artists.
+    """
+    print('API working...')
     
     # Get list of all liked tracks
     tracks = client.users_likes_tracks()
@@ -56,7 +67,7 @@ def get_online_data():
     }
 
 # google sheets bug: turns int fields into floats, parsed as X.0 instead of X
-def strip_trailing_dot_zero(value):
+def strip_trailing_dot_zero(value) -> str:
     if value == None:
         return None
     s = str(value)
@@ -64,10 +75,10 @@ def strip_trailing_dot_zero(value):
         return s[:-2]  # remove the '.0' suffix
     return s
 
-def load_changes(filename='./changes.xlsx') -> dict:
+def load_changes(filename='./changes.xlsx') -> list:
     """
-    Reads Excel file with checkbox (boolean) in column A and string in column B.
-    Returns list of dicts: [{False: "string1"}, {True: "string2"}, ...]
+    Reads Excel file with changes library.
+    Each row describes an artist, album or track. Like is a checkbox.
     """
     wb = load_workbook(filename, data_only=True)
     ws = wb.active
@@ -122,7 +133,8 @@ def load_changes(filename='./changes.xlsx') -> dict:
 
 def update_changes(online_data, changes) -> list:
     """
-    Populate changes with missing information from online_data (new tracks, changed info)
+    Populate changes with missing information from online_data (new tracks, changed info).
+    Fetches missing information plus adds new likes if set from online to the changes file.
     """
 
     # Add missing artists
@@ -246,9 +258,9 @@ def update_changes(online_data, changes) -> list:
         changes,
         key=lambda x: (
             0 if not x.get('track_id', '') else 1,
-            0 if is_russian_genre(x.get('genres', '')) else 1,
-            0 if is_russian_genre(x.get('genre', '')) else 1,
-            1 if is_english(x.get('artist', '')) else 0,
+            0 if is_genre_russian(x.get('genres', '')) else 1,
+            0 if is_genre_russian(x.get('genre', '')) else 1,
+            1 if is_title_latin(x.get('artist', '')) else 0,
             x.get('artist', '').lower(),
             0 if not x.get('album_id', '') else 1,
             x.get('genres', '').lower(),
@@ -258,9 +270,8 @@ def update_changes(online_data, changes) -> list:
 
 def dump_changes(changes, filename='./changes.xlsx'):
     """
-    Writes the changes list (list of dicts) back to Excel file.
-    Adds one extra row at the top with hardcoded checkbox and string.
-    Each row: checkbox (boolean) in column A, string in column B.
+    Writes the changes list (list of dicts) back to Excel file
+    with updates/additions
     """
     wb = Workbook()
     ws = wb.active
@@ -295,6 +306,10 @@ def dump_changes(changes, filename='./changes.xlsx'):
     wb.save(filename)
 
 def set_likes_changes(online_data, changes, filename='./changes.xlsx'):
+    """
+    Apply changes from file to online.
+    Set new likes and remove likes from online, according to checkboxes in file.
+    """
 
     add_artists = []
     add_albums = []
@@ -341,6 +356,7 @@ def set_likes_changes(online_data, changes, filename='./changes.xlsx'):
     print('Summary of likes to change online:')
     print('Remove likes: artists %d albums %d tracks %d' % (len(rm_artists), len(rm_albums), len(rm_tracks)))
     print('Add likes:    artists %d albums %d tracks %d' % (len(add_artists), len(add_albums), len(add_tracks)))
+    print('API working...')
 
     if rm_tracks:
         client.users_likes_tracks_remove(track_ids=rm_tracks)
