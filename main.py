@@ -1,23 +1,33 @@
 # %%
-from ymusic_cleanup import client, get_online_data, load_changes, update_changes, dump_changes, set_likes_changes
+import logging
+from ymusic_liketable import Worker
+from table_xlsx import XlsxFileDriver
+
+logging.basicConfig(
+    level=logging.WARN,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+# %%
+table_driver = XlsxFileDriver(filename='./changes.xlsx')
+
+w = Worker(token=open('token.txt').read().strip('\n'), language='en')
 
 # %%
 try:
-    changes = load_changes()
+    table_data = table_driver.bulk_read()
 except FileNotFoundError:
     print("File not found, starting with empty changes list.")
-    changes = []
+    table_data = []
 
 # %%
-online_data = get_online_data()
+online_data = w.get_online_data()
 
 # %%
-changes = update_changes(online_data, changes)
+table_data = w.get_updated_table(online_data, table_data)
 
 # %%
-dump_changes(changes)
+w.set_ymusic_likes(online_data, table_data)
 
 # %%
-set_likes_changes(online_data, changes)
-
-
+table_driver.bulk_write(table_data)

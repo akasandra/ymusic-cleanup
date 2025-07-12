@@ -1,4 +1,4 @@
-# ymusic-cleanup
+# ymusic-liketable
 
 Скрипт для получения таблицы со всеми лайками на музыку. Если снимать галочки в таблице, лайки будут сняты и это позволяет управлять рекомендациями "волны", например.
 
@@ -8,8 +8,8 @@
 
  1. Получить токен из браузера https://github.com/MarshalX/yandex-music-api/discussions/513
  2. Сохранить в `token.txt`
- 3. `poetry install`
- 4. Use `poetry env path` as Jupyter Kernel
+ 3. `poetry install --no-root`
+ 4. Use Virtualenv path (from `poetry env info`) as Jupyter Kernel path
  5. Run all in the jupyter notebook -- создает файл `changes.xlsx`
 
     **Вместо Jupyter можно использовать `poetry run python main.py`**
