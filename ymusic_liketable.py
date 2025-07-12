@@ -36,14 +36,13 @@ class Worker:
         return sorted(
             changes,
             key=lambda x: (
-                0 if not x.get('track_id', '') else 1,
                 0 if is_genre_russian(x.get('genres', '')) else 1,
                 0 if is_genre_russian(x.get('genre', '')) else 1,
                 1 if is_title_latin(x.get('artist', '')) else 0,
+                x.get('genres'),
                 x.get('artist', '').lower(),
                 0 if not x.get('album_id', '') else 1,
-                x.get('genres', '').lower(),
-                x.get('genre', '').lower()
+                0 if not x.get('track_id', '') else 1
             )
         )
 
@@ -76,166 +75,151 @@ class Worker:
         Populate changes with missing information from online_data (new tracks, changed info).
         Fetches missing information plus adds new likes if set from online to the changes file.
         """
+        num_changed_tracks = 0
+        num_changed_albums = 0
+        num_changed_artists = 0
+
+        new_track_ids = []
+        new_album_ids = []
+        new_artist_ids = []
 
         # Find the most recent timestamp in changes file.
         current_time = int(datetime.now(timezone.utc).timestamp())
-        changes_max_time = current_time
+        changes_max_time = 0
         if changes:
             changes_max_time = max(d['time'] for d in changes)
 
         # Find likes set AFTER the file timestamp from API, and re-set checkbox in the file for those
-        new_tracks = 0
-        new_albums = 0
-        new_artists = 0
+        select_newer_online = lambda key: (i for i in online_data[key] if iso_to_utc_timestamp(i.timestamp) > changes_max_time)
 
-        online_data_newer = lambda key: (i for i in online_data[key] if iso_to_utc_timestamp(i.timestamp) >= changes_max_time)
+        # Find and update one, with predicate, func, and userdata
+        def update_changes_where(predicate, f, i):
+            for idx, c in enumerate(changes):
+                if predicate(c):
+                    product = f(i, c)
+                    changes[idx] = product if product else c
+                    return True
+            return False
 
-        off_changes = [c for c in changes if not c['like_on']]
+        # Func to reset like if it is not set
+        def set_like_on(i, c):
+            c['like_on'] = True
+            c['timestamp'] = i.timestamp
+            return c
 
-        for i in online_data_newer('tracks'):
-            for c in (c for c in off_changes if c['track_id'] == i.id):
-                c['like_on'] = True
-                c['timestamp'] = i.timestamp
-                new_tracks += 1
-        
-        for i in online_data_newer('albums'):
-            for c in (c for c in off_changes if not c['track_id'] and c['album_id'] == i.album.id and i.album.id):
-                c['like_on'] = True
-                c['timestamp'] = i.timestamp
-                new_albums += 1
-        
-        for i in online_data_newer('artists'):
-            for c in (c for c in off_changes if not c['track_id'] and not c['album_id'] and c['artist_id'] == i.artist.id and i.artist.id):
-                c['like_on'] = True
-                c['timestamp'] = i.timestamp
-                new_artists += 1
+        # Reset likes if newer online like, for each track/artist/album
 
-        print('Likes ON again (timestamp):\n\tartists %d albums %d tracks %d' % (new_artists, new_albums, new_tracks))
-
-        new_tracks = 0
-        new_albums = 0
-        new_artists = 0
-
-        # Add artists missings in changes
-        for artist in online_data.get('artists'):
-            artist_id = artist.artist.id
-            genres = ', '.join(artist.artist.genres) if artist.artist.genres else ''
-            name = artist.artist.name if artist.artist.name else ''
-
-            match = next(
-                (d for d in changes if d['artist_id'] == artist_id and not d['album_id'] and not d['track_id']),
-                None
-            )
-            if not match:
-                new_artists += 1
+        for i in select_newer_online('tracks'):
+            if not i.id:
+                continue
+            if update_changes_where(lambda c: c['track_id'] == str(i.id), set_like_on, i):
+                num_changed_tracks += 1
+            else:
+                new_track_ids.append(i.id)
                 changes.append({
-                    'artist_id': artist_id,
-                    'album_id': None,
-                    'track_id': None,
-                    'timestamp': artist.timestamp,
+                    'artist_id': '',
+                    'album_id': '',
+                    'track_id': str(i.id),
                     'like_on': True,
-                    'artist': name,
-                    'genres': genres,
-                    'genre': artist.artist.genres[0] if artist.artist.genres else ''
+                    'timestamp': i.timestamp,
+                    'time': iso_to_utc_timestamp(i.timestamp),
                 })
-
-        # Add albums missing in changes
-        for album in online_data.get('albums'):
-            album_id = str(album.album.id)
-            genre = album.album.genre
-            title = album.album.title
-
-            match = next(
-                (d for d in changes if d['album_id'] == album_id and not d['track_id']),
-                None
-            )
-            if not match:
-                new_albums += 1
+        
+        for i in select_newer_online('albums'):
+            if not i.album.id:
+                continue
+            if update_changes_where(lambda c: not c['track_id'] and c['album_id'] == str(i.album.id), set_like_on, i):
+                num_changed_albums += 1
+            else:
+                new_album_ids.append(i.album.id)
                 changes.append({
-                    'artist_id': album.album.artists[0].id if album.album.artists else '',
-                    'album_id': album_id,
-                    'track_id': None,
-                    'timestamp': album.timestamp,
+                    'artist_id': '',
+                    'album_id': str(i.album.id),
+                    'track_id': '',
                     'like_on': True,
-                    'artist': album.album.artists[0].name if album.album.artists else '',
-                    'genre': genre if genre else '',
+                    'timestamp': i.timestamp,
+                    'time': iso_to_utc_timestamp(i.timestamp),
                 })
-
-        # Add tracks missing in changes
-        for track in online_data.get('tracks'):
-            match = next(
-                (d for d in changes if d['track_id'] == track.id),
-                None
-            )
-            if not match:
-                new_tracks += 1
+        
+        for i in select_newer_online('artists'):
+            if not i.artist.id:
+                continue
+            if update_changes_where(lambda c: not c['track_id'] and not c['album_id'] and c['artist_id'] == str(i.artist.id), set_like_on, i):
+                um_changed_artists += 1
+            else:
+                new_artist_ids.append(i.artist.id)
                 changes.append({
-                    'artist_id': None,
-                    'album_id': track.album_id,
-                    'track_id': track.id,
-                    'timestamp': track.timestamp,
-                    'like_on': True
+                    'artist_id': str(i.artist.id),
+                    'album_id': '',
+                    'track_id': '',
+                    'like_on': True,
+                    'timestamp': i.timestamp,
+                    'time': iso_to_utc_timestamp(i.timestamp),
                 })
 
-        print('Likes added NEW:\n\tartists %d albums %d tracks %d' % (new_artists, new_albums, new_tracks))
+        print('New likes add/set in table:\n\tartists %d albums %d tracks %d' % (num_changed_artists, num_changed_albums, num_changed_tracks))
 
-        # TODO: Always loads something, should not after the initial run and no additions in library ⤵️
-        # FIXME: incomplete output data (no album info on tracks and albums)
+        # Fetch metadata for new items (artist/track names, year, genre, etc)
+        track_info = {}
+        album_info = {}
+        artist_info = {}
 
-        # Fetch missing tracks information
-        track_ids = [i.get('track_id') for i in changes if i.get('track_id') and (
-            not i.get('track') 
-            or not i.get('artist')
-        )]
-        track_ids = list(dict.fromkeys(track_ids))
-        tracks = []
-        if track_ids:
-            print('Need extra information for %d tracks' % len(track_ids))
-            tracks = self.client.tracks(with_positions=False, track_ids=track_ids)
+        print('Fetching metadata for new items')
 
-        # Fetch missing albums information
-        album_ids = [
-            i.get('album_id')
-            for i in changes
-            if not i.get('track_id') and i.get('album_id')
-            and not any(a.album.id == i.get('album_id') for a in online_data.get('albums'))
-            and not any(track_in_album for track_in_album in tracks if any(a.id == i.get('album_id') for a in track_in_album.albums))
-        ]
-        album_ids = list(dict.fromkeys(album_ids))
-        albums = []
-        if album_ids:
-            print('Need extra information for %d albums' % len(album_ids))
-            albums = self.client.albums(album_ids=album_ids)
+        if new_track_ids:
+            data = self.client.tracks(with_positions=False, track_ids=list(set(new_track_ids)))
+            track_info = {str(i.id): i for i in data}
+            for track in data:
+                if track.albums:
+                    new_album_ids.append(track.albums[0].id)
 
-        # Substitute incomplete file data (changes) with the online data (albums, tracks)
-        for idx, c in enumerate(changes):
-            if c['track_id']:
-                track = next((t for t in tracks if t.id == c['track_id']), None)
-                if track:
-                    c['artist_id'] = str(track.artists[0].id)
-                    c['album_id'] = str(track.albums[0].id)
-                    c['track'] = track.title if not track.version else '%s (%s)' % (track.title, track.version)
-            if c.get('album_id'):
-                album = next((a for a in albums if a.id == c['album_id']), None)
-                if not album:
-                    track = next((t for t in tracks if t.albums[0].id == c['album_id']), None)
-                    if track:
-                        album = track.albums[0]
-                if album:
-                    c['album'] = album.title if album.title else ''
-                    c['genre'] = album.genre if album.genre else ''
-                    c['year'] = next((y for y in ( album.original_release_year, album.year, album.release_date[:4] if album.release_date else '') if y), None)
-            if c.get('artist_id'):
-                artist = next((a.artists[0] for a in albums if a.artists and a.artists[0].id == c['artist_id']), None)
-                if not artist:
-                    artist = next((t.artists[0] for t in tracks if t.artists[0].id == c['artist_id']), None)
-                if not artist:
-                    artist = next((a.artist for a in online_data['artists'] if a.artist.id == c['artist_id']), None)
-                if artist:
-                    c['artist'] = artist.name if artist.name else ''
-                    c['genres'] = ', '.join(artist.genres)
+        if new_album_ids:
+            data = self.client.albums(album_ids=list(set(new_album_ids)))
+            album_info = {str(i.id): i for i in data}
+            for album in data:
+                if album.artists:
+                    new_artist_ids.append(album.artists[0].id)
 
-            changes[idx] = c
+        if new_artist_ids:
+            data = self.client.artists(artist_ids=list(set(new_artist_ids)))
+            artist_info = {str(i.id): i for i in data}
+
+        print('New metadata: artists %d albums %d tracks %d' % (len(artist_info), len(album_info), len(track_info)))
+
+        # Substitute changes with the metadata (artist/track names, year, genre, etc) for each element that may need this
+        for c in changes:
+            track = track_info.get(c['track_id']) if c['track_id'] else None
+
+            if track:
+                c['album_id'] = str(track.albums[0].id) if track.albums else ''
+                c['artist_id'] = str(track.artists[0].id) if track.artists else ''
+
+            album = album_info.get(c['album_id']) if c['album_id'] else None
+
+            if album and album.artists:
+                c['artist_id'] = str(album.artists[0].id)
+                if len(album.artists) > 1:
+                    c['artist'] = ', '.join(i.name for i in album.artists)
+
+            artist = artist_info.get(c['artist_id']) if c['artist_id'] else None
+
+            if artist and not c.get('artist'):
+                c['artist'] = artist.name if artist.name else ''
+            if artist and not c.get('genres'):
+                c['genres'] = ', '.join(artist.genres) if artist.genres else ''
+
+            if album and not c.get('album'):
+                year_variants = (album.original_release_year, album.year, album.release_date[:4] if album.release_date else '')
+                c['year'] = next((str(y) for y in year_variants if y), '')
+                c['genre'] = album.genre if album.genre else ''
+                c['album'] = album.title if album.title else ''
+                if album.version:
+                    c['album'] += ' (%s)' % album.version
+
+            if track and not c.get('track'):
+                c['track'] = track.title if track.title else ''
+                if track.version:
+                    c['track'] += ' (%s)' % track.version
 
         return self.sort_changes(changes)
 

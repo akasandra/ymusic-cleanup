@@ -31,3 +31,4 @@ w.set_ymusic_likes(online_data, table_data)
 
 # %%
 table_driver.bulk_write(table_data)
+print('Table file saved')
