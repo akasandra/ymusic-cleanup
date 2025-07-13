@@ -1,7 +1,6 @@
 
 import re
 from yandex_music import Client
-from datetime import datetime, timezone
 from utility import iso_to_utc_timestamp, iso_to_utc_year
 
 # Allowed characters:
@@ -28,10 +27,10 @@ class Worker:
         self.token = token
         self.client = Client(token, language=language).init()
 
-    ##aaa
     def sort_changes(self, changes: list) -> list:
         """
-        Use sorting in Excel app for HUD. File always gets sorted one way (not using like timestamps)
+        Sorts full list of likes for the output. 
+        To be used externally, only if saving is done with bulk_write manner (not bulk_update) or table saved first time.
         """
         return sorted(
             changes,
@@ -84,7 +83,6 @@ class Worker:
         new_artist_ids = []
 
         # Find the most recent timestamp in changes file.
-        current_time = int(datetime.now(timezone.utc).timestamp())
         changes_max_time = 0
         if changes:
             changes_max_time = max(d['time'] for d in changes)
@@ -93,7 +91,7 @@ class Worker:
         select_newer_online = lambda key: (i for i in online_data[key] if iso_to_utc_timestamp(i.timestamp) > changes_max_time)
 
         # Find and update one, with predicate, func, and userdata
-        def update_changes_where(predicate, f, i):
+        def update_changes_where(predicate, f, i=None):
             for idx, c in enumerate(changes):
                 if predicate(c):
                     product = f(i, c)
@@ -101,25 +99,25 @@ class Worker:
                     return True
             return False
 
-        # Func to reset like if it is not set
+        # Func to reset like
         def set_like_on(i, c):
             c['like_on'] = True
             c['timestamp'] = i.timestamp
             return c
 
         # Reset likes if newer online like, for each track/artist/album
-
-        for i in select_newer_online('tracks'):
-            if not i.id:
+        
+        for i in select_newer_online('artists'):
+            if not i.artist.id:
                 continue
-            if update_changes_where(lambda c: c['track_id'] == str(i.id), set_like_on, i):
-                num_changed_tracks += 1
+            if update_changes_where(lambda c: not c['track_id'] and not c['album_id'] and c['artist_id'] == str(i.artist.id), set_like_on, i):
+                num_changed_artists += 1
             else:
-                new_track_ids.append(i.id)
+                new_artist_ids.append(i.artist.id)
                 changes.append({
-                    'artist_id': '',
+                    'artist_id': str(i.artist.id),
                     'album_id': '',
-                    'track_id': str(i.id),
+                    'track_id': '',
                     'like_on': True,
                     'timestamp': i.timestamp,
                     'time': iso_to_utc_timestamp(i.timestamp),
@@ -140,24 +138,50 @@ class Worker:
                     'timestamp': i.timestamp,
                     'time': iso_to_utc_timestamp(i.timestamp),
                 })
-        
-        for i in select_newer_online('artists'):
-            if not i.artist.id:
+
+        for i in select_newer_online('tracks'):
+            if not i.id:
                 continue
-            if update_changes_where(lambda c: not c['track_id'] and not c['album_id'] and c['artist_id'] == str(i.artist.id), set_like_on, i):
-                um_changed_artists += 1
+            if update_changes_where(lambda c: c['track_id'] == str(i.id), set_like_on, i):
+                num_changed_tracks += 1
             else:
-                new_artist_ids.append(i.artist.id)
+                new_track_ids.append(i.id)
                 changes.append({
-                    'artist_id': str(i.artist.id),
+                    'artist_id': '',
                     'album_id': '',
-                    'track_id': '',
+                    'track_id': str(i.id),
                     'like_on': True,
                     'timestamp': i.timestamp,
                     'time': iso_to_utc_timestamp(i.timestamp),
                 })
 
         print('New likes add/set in table:\n\tartists %d albums %d tracks %d' % (num_changed_artists, num_changed_albums, num_changed_tracks))
+
+        # Reflect likes removed from Yandex Music
+        num_unliked = 0
+
+        liked_track_ids = [str(i.id) for i in online_data['tracks']]
+        liked_album_ids = [str(i.album.id) for i in online_data['albums']]
+        liked_artist_ids = [str(i.artist.id) for i in online_data['artists']]
+
+        def found_in_online_data(c):
+            if c['track_id']:
+                return c['track_id'] in liked_track_ids
+            elif c['album_id']:
+                return not c['track_id'] and c['album_id'] in liked_album_ids
+            elif c['artist_id']:
+                return not c['album_id'] and not c['track_id'] and c['artist_id'] in liked_artist_ids
+            else:
+                return False
+
+        for c in changes:
+            if c['like_on'] and c['timestamp'] and not found_in_online_data(c):
+                c['like_on'] = False
+                c['timestamp'] = ''
+                c['time'] = 0
+                num_unliked += 1
+
+        print('Likes unset in table from online:', num_unliked)
 
         # Fetch metadata for new items (artist/track names, year, genre, etc)
         track_info = {}
@@ -226,7 +250,7 @@ class Worker:
                 if track.version:
                     c['track'] += ' (%s)' % track.version
 
-        return self.sort_changes(changes)
+        return changes
 
     def set_ymusic_likes(self, online_data: dict, changes: list):
         """
