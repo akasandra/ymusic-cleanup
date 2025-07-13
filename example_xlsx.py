@@ -15,18 +15,14 @@ table_driver = XlsxFileDriver(filename='./changes.xlsx')
 w = Worker(token=open('token.txt').read().strip('\n'), language='en')
 
 # %%
-try:
-    table_data = table_driver.bulk_read()
-except FileNotFoundError:
-    print("File not found, starting with empty table_data list.")
-    table_data = []
+table_data = table_driver.bulk_read()
+
+old_data = deepcopy(table_data)
 
 # %%
 online_data = w.get_online_data()
 
 # %%
-old_data = deepcopy(table_data)
-
 table_data = w.get_updated_table(online_data, table_data)
 
 # %%
