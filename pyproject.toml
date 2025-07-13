@@ -8,3 +8,8 @@ python = ">=3.8,<4.0"
 yandex-music = "^2.2.0"
 ipykernel = "^6.29.5"
 openpyxl = "^3.1.5"
+gspread = "^6.2.1"
+
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.29.5"
+

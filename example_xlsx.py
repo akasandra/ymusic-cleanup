@@ -1,7 +1,7 @@
 # %%
 import logging
 from ymusic_liketable import Worker
-from table_xlsx import XlsxFileDriver
+from driver_xlsx import XlsxFileDriver
 
 logging.basicConfig(
     level=logging.WARN,
