@@ -1,99 +1,76 @@
 from openpyxl import load_workbook, Workbook
-from datetime import datetime, timezone
-
-def iso_to_utc_timestamp(iso_str: str) -> int:
-    # Parse ISO 8601 string (Python 3.8 requires replacing 'Z' with '+00:00' if present)
-    dt = datetime.fromisoformat(iso_str.replace('Z', '+00:00'))
-    # Convert to UTC timezone if not already UTC
-    dt_utc = dt.astimezone(timezone.utc)
-    # Return Unix timestamp as int
-    return int(dt_utc.timestamp())
-
-def iso_to_utc_year(iso_str: str) -> int:
-    # Parse ISO 8601 string (Python 3.8 requires replacing 'Z' with '+00:00' if present)
-    dt = datetime.fromisoformat(iso_str.replace('Z', '+00:00'))
-    # Convert to UTC timezone if not already UTC
-    dt_utc = dt.astimezone(timezone.utc)
-    # Return year component
-    return dt_utc.year
-
-# google sheets/etc auto formatting bug: turns int fields into floats, parsed as X.0 instead of X
-def strip_trailing_dot_zero(value) -> str:
-    if value == None:
-        return None
-    s = str(value)
-    if s.endswith('.0'):
-        return s[:-2]  # remove the '.0' suffix
-    return s
+from utility import iso_to_utc_timestamp, strip_trailing_dot_zero, value_to_bool
 
 class XlsxFileDriver:
+
+    # Order of table columns and key names mapping for rows
+    COLUMN_KEYS = [
+        'like_on',
+        'artist_id',
+        'album_id',
+        'track_id',
+        'timestamp',
+        'artist',
+        'genres',
+        'album',
+        'track',
+        'year',
+        'genre'
+    ]
+
+    # Transformations after read value for every cell value, by key
+    READ_PROCESSORS = {
+        'like_on': value_to_bool,
+        'artist_id': strip_trailing_dot_zero,
+        'album_id': strip_trailing_dot_zero,
+        'track_id': strip_trailing_dot_zero,
+        'year': strip_trailing_dot_zero
+    }
+
+    # Transformations before write value to openpyxl, by key
+    WRITE_PROCESSORS = {}
+
     def __init__(self, filename: str):
         self.filename = filename
 
     def bulk_read(self) -> list:
+        wb = load_workbook(self.filename, data_only=True)
+        try:
+            ws = wb.active
+            read_items = self._bulk_read(ws=ws, min_row=2, max_row=None, column_count=len(self.COLUMN_KEYS))
+            return list(read_items)
+        finally:
+            wb.close()
+
+    def _bulk_read(self, ws, min_row: int, max_row: int, column_count: int) -> list:
         """
         Reads Excel file with changes library.
         Each row describes an artist, album or track. Like is a checkbox.
         """
-        wb = load_workbook(self.filename, data_only=True)
-        ws = wb.active
+        # Per each row, define how each cell value is post-processed (func) using a key in 'processors' 
+        processors = self.READ_PROCESSORS.copy()
+        for k in self.COLUMN_KEYS:
+            if not k in processors:
+                processors[k] = lambda value: str(value).strip() if value != None and str(value) else ''
 
-        current_time = int(datetime.now(timezone.utc).timestamp())
-        
-        changes = []
-        for row in ws.iter_rows(min_row=2, max_col=11):
-            like_on = row[0].value
-            artist_id = strip_trailing_dot_zero(row[1].value)
-            album_id = strip_trailing_dot_zero(row[2].value)
-            track_id = strip_trailing_dot_zero(row[3].value)
-            timestamp = row[4].value
-            artist = row[5].value
-            genres = row[6].value
-            album = row[7].value
-            track = row[8].value
-            year = strip_trailing_dot_zero(row[9].value)
-            genre = row[10].value
+        # Read every row in range and return rows as key-value dicts
+        for row in ws.iter_rows(min_row=min_row, max_row=max_row, max_col=column_count):
+
+            # Empty key-value for each column
+            c = {k: '' for k in self.COLUMN_KEYS[:column_count]}
+
+            # Fill with cell data and post-processed values
+            for idx, cell in enumerate(row):
+                key = self.COLUMN_KEYS[idx]
+                c[key] = processors[key](cell.value)
+
+            # Add unix time 'time' key to the each element
+            timestamp = c.get('timestamp')
+            c['time'] = iso_to_utc_timestamp(timestamp) if timestamp else 0
             
-            # Normalize boolean value: openpyxl may read Excel TRUE/FALSE as str or bool
-            if isinstance(like_on, str):
-                like_on = like_on.strip().upper() == 'TRUE'
-            else:
-                like_on = bool(like_on)
-            
-            # If string cell is None, convert to empty string for consistency
-            artist_id = str(artist_id) if artist_id is not None else ""
-            album_id = str(album_id) if album_id is not None else ""
-            track_id = str(track_id) if track_id is not None else ""
-            timestamp = str(timestamp) if timestamp is not None else ""
-            artist = str(artist) if artist is not None else ""
-            genres = str(genres) if genres is not None else ""
-            album = str(album) if album is not None else ""
-            track = str(track) if track is not None else ""
-            year = str(year) if year is not None else ""
-            genre = str(genre) if genre is not None else ""
-            
-            changes.append({
-                'artist_id': artist_id,
-                'album_id': album_id,
-                'track_id': track_id,
-                'timestamp': timestamp,
-                'like_on': like_on,
-                'artist': artist,
-                'genres': genres,
-                'album': album,
-                'track': track,
-                'year': year,
-                'genre': genre,
-                'time': iso_to_utc_timestamp(timestamp) if timestamp else 0
-            })
-        
-        return changes
+            yield c
 
     def bulk_write(self, changes: list):
-        """
-        Writes the changes list (list of dicts) back to Excel file
-        with updates/additions
-        """
         wb = Workbook()
         ws = wb.active
 
@@ -110,20 +87,28 @@ class XlsxFileDriver:
         ws.cell(row=1, column=10, value='year')
         ws.cell(row=1, column=11, value='genre')
 
-        # Write the changes
-        for row_idx, change in enumerate(changes, start=2):
-            ws.cell(row=row_idx, column=1, value=change.get('like_on'))
-            ws.cell(row=row_idx, column=2, value=change.get('artist_id'))
-            ws.cell(row=row_idx, column=3, value=change.get('album_id'))
-            ws.cell(row=row_idx, column=4, value=change.get('track_id'))
-            ws.cell(row=row_idx, column=5, value=change.get('timestamp'))
-            ws.cell(row=row_idx, column=6, value=change.get('artist'))
-            ws.cell(row=row_idx, column=7, value=change.get('genres'))
-            ws.cell(row=row_idx, column=8, value=change.get('album'))
-            ws.cell(row=row_idx, column=9, value=change.get('track'))
-            ws.cell(row=row_idx, column=10, value=change.get('year'))
-            ws.cell(row=row_idx, column=11, value=change.get('genre'))
+        self._bulk_write(ws=ws, min_row=2, changes=changes, columns=self.COLUMN_KEYS)
 
         wb.save(self.filename)
+        wb.close()
+
+    def _bulk_write(self, ws, min_row: int, changes: list, columns: list):
+        """
+        Writes the changes list (list of dicts) back to Excel file
+        with updates/additions
+        """
+
+        # Processors per each column we may need or default
+        processors = {k: lambda v: v for k in columns}
+        for k, f in self.WRITE_PROCESSORS:
+            processors[k] = f
+
+        # Write the changes
+        for row, c in enumerate(changes):
+            for column, key in enumerate(columns):
+                if not key in c:
+                    continue
+                value = processors[key](c[key])
+                ws.cell(row=min_row+row, column=column+1, value=value)
 
 # End

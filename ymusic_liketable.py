@@ -2,7 +2,7 @@
 import re
 from yandex_music import Client
 from datetime import datetime, timezone
-from driver_xlsx import iso_to_utc_timestamp, iso_to_utc_year
+from utility import iso_to_utc_timestamp, iso_to_utc_year
 
 # Allowed characters:
 # - Basic Latin letters (A-Z, a-z)
