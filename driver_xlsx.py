@@ -33,11 +33,27 @@ class XlsxFileDriver:
     def __init__(self, filename: str):
         self.filename = filename
 
-    def bulk_read(self) -> list:
+    def bulk_write(self, changes: list):
+        wb = Workbook()
+        ws = wb.active
+
+        # Header row
+        for i, key in enumerate(self.COLUMN_KEYS):
+            ws.cell(row=1, column=i+1, value=key)
+
+        # Write full table (assume metadata is present)
+        self._bulk_write(ws=ws, min_row=2, changes=changes, columns=self.COLUMN_KEYS)
+
+        wb.save(self.filename)
+        wb.close()
+
+    def bulk_read(self, no_metadata: bool=False) -> list:
+        num_columns = 5 if no_metadata else len(self.COLUMN_KEYS)
+
         wb = load_workbook(self.filename, data_only=True)
         try:
             ws = wb.active
-            read_items = self._bulk_read(ws=ws, min_row=2, max_row=None, column_count=len(self.COLUMN_KEYS))
+            read_items = self._bulk_read(ws=ws, min_row=2, max_row=None, column_count=num_columns)
             return list(read_items)
         finally:
             wb.close()
@@ -70,28 +86,6 @@ class XlsxFileDriver:
             
             yield c
 
-    def bulk_write(self, changes: list):
-        wb = Workbook()
-        ws = wb.active
-
-        # Header row
-        ws.cell(row=1, column=1, value='like')
-        ws.cell(row=1, column=2, value='artist_id')
-        ws.cell(row=1, column=3, value='album_id')
-        ws.cell(row=1, column=4, value='track_id')
-        ws.cell(row=1, column=5, value='timestamp')
-        ws.cell(row=1, column=6, value='artist')
-        ws.cell(row=1, column=7, value='genres')
-        ws.cell(row=1, column=8, value='album')
-        ws.cell(row=1, column=9, value='track')
-        ws.cell(row=1, column=10, value='year')
-        ws.cell(row=1, column=11, value='genre')
-
-        self._bulk_write(ws=ws, min_row=2, changes=changes, columns=self.COLUMN_KEYS)
-
-        wb.save(self.filename)
-        wb.close()
-
     def _bulk_write(self, ws, min_row: int, changes: list, columns: list):
         """
         Writes the changes list (list of dicts) back to Excel file
@@ -110,5 +104,56 @@ class XlsxFileDriver:
                     continue
                 value = processors[key](c[key])
                 ws.cell(row=min_row+row, column=column+1, value=value)
+
+    def bulk_update(self, new_changes: list, old_changes: list=None):
+        # Reopen workbook
+        wb = load_workbook(self.filename, data_only=False)
+        ws = wb.active
+
+        # Read full current table with likes state to see if any needs update checkbox
+        old_changes = self.bulk_read(no_metadata=True) if not old_changes else old_changes
+
+        # Finds newest state per like id
+        def get_new_state(c):
+            for new in new_changes:
+                if new['artist_id'] == c['artist_id'] and new['album_id'] == c['album_id'] and new['track_id'] == c['track_id']:
+                    return new
+
+        # Update likes on old changes (assume order is consistent)
+        num_old_rows = 2 + len(old_changes)
+        num_updated = 0
+        for i, c in enumerate(old_changes):
+            # For each of the existing table rows, get the updated state
+            new = get_new_state(c)
+            if not new:
+                continue
+
+            # For rows with updated like/timestamp, update the row
+            if c['like_on'] != new['like_on'] or c['time'] != new['time']:
+                num_updated += 1
+                print('Update row', i+2)
+                self._bulk_write(ws=ws, min_row=2+i, changes=[new], columns=['like_on', 'timestamp'])
+
+        print('Rows updated:', num_updated)
+
+        # The rest of changes are new, write to table
+        # Write new table rows (assume metadata is present for new_changes)
+
+        new_changes = new_changes[len(old_changes):]
+
+        # Aggregate rows that are missing
+        # Ensure not duplicating rows
+        def find_old_entry(c):
+            for old in old_changes:
+                if all((old[k] == c[k] for k in ['artist_id', 'album_id', 'track_id'])):
+                    yield old
+
+        new_changes = list((c for c in new_changes if not any(find_old_entry(c))))
+
+        self._bulk_write(ws=ws, min_row=num_old_rows, changes=new_changes, columns=self.COLUMN_KEYS)
+        print('Rows added:', len(new_changes))
+
+        wb.save(self.filename)
+        wb.close()
 
 # End
