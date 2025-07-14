@@ -61,22 +61,19 @@ class Liketable:
         for c in off_changes:
 
             if c.get('track_id'):
-                track = next((t for t in online_data['tracks'] if str(t.id) == c['track_id']), None)
-                if not track:
+                if not any(t for t in online_data['tracks'] if str(t.id) == c['track_id']):
                     continue
 
                 rm_tracks.append(c['track_id'])
 
             elif c.get('album_id'):
-                album = next((a for a in online_data['albums'] if str(a.album.id) == str(c['album_id'])), None)
-                if not album:
+                if not any(a for a in online_data['albums'] if str(a.album.id) == str(c['album_id'])):
                     continue
                 
                 rm_albums.append(c['album_id'])
 
             elif c.get('artist_id'):
-                artist = next((a for a in online_data['artists'] if str(a.artist.id) == c['artist_id']), None)
-                if not artist:
+                if not any(a for a in online_data['artists'] if str(a.artist.id) == c['artist_id']):
                     continue
                 
                 rm_artists.append(c['artist_id'])
