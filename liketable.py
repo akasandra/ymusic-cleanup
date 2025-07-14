@@ -3,7 +3,7 @@ import logging
 from yandex_music import Client
 from utility import iso_to_utc_timestamp, iso_to_utc_year
 
-class Worker:
+class Liketable:
     def __init__(self, token: str, language: str):
         self.token = token
         self.client = Client(token, language=language).init()

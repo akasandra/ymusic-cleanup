@@ -1,4 +1,4 @@
-from ymusic_liketable import Worker
+from liketable import Liketable
 from driver import DriverBase
 from table_helper import TableHelper
 from driver_xlsx import XlsxFileDriver

@@ -1,7 +1,8 @@
 # %%
 import logging
 from copy import deepcopy
-from ymusic_liketable import Worker
+from liketable import Liketable
+from table_helper import TableHelper
 from driver_google import GoogleSpreadsheetDriver
 from google_helper import GoogleHelper
 
@@ -26,15 +27,15 @@ gc = GoogleHelper.client_json_creds(filename=google_creds_file, client_id=None, 
 # creds.json may need to be updated if refresh token has changed during lifetime.
 cb = GoogleHelper.make_file_update_function(google_creds_file)
 
-table_driver = GoogleSpreadsheetDriver(gc=gc, spreadsheet_url=table_url, refreshtoken_callback=cb)
+table = GoogleSpreadsheetDriver(gc=gc, spreadsheet_url=table_url, refreshtoken_callback=cb)
 
 # %%
 yandex_token = open('token.txt').read().strip('\n')
 
-w = Worker(token=yandex_token, language='en')
+w = Liketable(token=yandex_token, language='en')
 
 # %%
-table_data = table_driver.bulk_read(no_metadata=True)
+table_data = table.bulk_read(no_metadata=True)
 
 old_data = deepcopy(table_data)
 
@@ -42,16 +43,23 @@ old_data = deepcopy(table_data)
 online_data = w.get_online_data()
 
 # %%
-old_data = deepcopy(table_data)
-
 table_data = w.get_updated_table(online_data, table_data)
 
 # %%
 w.set_ymusic_likes(online_data, table_data)
 
 # %%
-table_driver.bulk_update(new_data=table_data, cached_old_data=old_data)
+if old_data:
+    table.bulk_update(table_data, cached_old_data=old_data)
+    print('Google sheets data updated')
 
-print('Google sheets data updated')
+# %%
+# Alternative: re-create file, with sorting
+if not old_data:
+    table_data = TableHelper.sort(table_data)
+    table.bulk_write(table_data)
+    old_data = table_data
+
+    print('Google sheets data was re/created with all current likes.')
 
 

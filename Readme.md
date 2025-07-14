@@ -21,17 +21,17 @@
 **Example**: `example_xlsx.py`
 
 #### Google Sheets API
-You may use Google Sheets API to work on google cloud spreadsheet document. Requirements:
+You may use Google Sheets API to work on google cloud spreadsheet document. 
 
- - Set up auth for google API (`creds.json`): Service Account (personal use) or OAuth (many users/apps mode)
- - Create spreadsheet document (href for `table_url`) and share access to your Google Console Project using `client_email` (creds) 
+Requirements:
+
+ - Ath for google API (`creds.json`): Service Account (personal use) or OAuth (many users/apps mode)
+ - A spreadsheet document (href for `table_url`) with access shared to `client_email` (creds) 
 
  **Example**: `example_google.py`
 
-##### Requirements
+##### Set up access
 
 1. Google Console Project
 2. Enable [Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com) per project
 3. Create Credentials and download JSON file (as `creds.json`)
-4. Create spreadsheet, copy URL
-5. Share spreadsheet with service account `client_email` address
