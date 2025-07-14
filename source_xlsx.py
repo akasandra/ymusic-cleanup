@@ -1,7 +1,7 @@
 import os
 from openpyxl import load_workbook, Workbook
 from utility import iso_to_utc_timestamp, strip_trailing_dot_zero, value_to_bool
-from driver import DriverBase
+from source import Source
 from table_helper import TableHelper
 
 # ContextManager
@@ -20,7 +20,7 @@ class WorkbookContext:
         # Delegate attribute access to the wrapped workbook
         return getattr(self._wb, name)
 
-class XlsxFileDriver(DriverBase, TableHelper):
+class XlsxSource(Source, TableHelper):
 
     def __init__(self, filename: str):
         self.filename = filename

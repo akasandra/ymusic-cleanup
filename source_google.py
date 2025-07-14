@@ -2,7 +2,7 @@ import logging
 import gspread
 import gspread.utils
 from typing import List, Union, Dict, Callable
-from driver import DriverBase
+from source import Source
 from utility import iso_to_utc_timestamp
 from table_helper import TableHelper
 from gspread_formatting import DataValidationRule, BooleanCondition, set_data_validation_for_cell_range, set_frozen
@@ -26,14 +26,14 @@ class SpreadsheetContext:
         # Delegate attribute access to the wrapped workbook
         return getattr(self._wb, name)
 
-class GoogleSpreadsheetDriver(DriverBase, TableHelper):
+class GoogleSheetSource(Source, TableHelper):
     """
     Read/Write likes using Google Spreadsheet API and gspread.Client
     """
 
     def __init__(self, gc: gspread.Client, spreadsheet_url: str, refreshtoken_callback: Callable[[Credentials], None]=None):
         """
-        New instance init for a gspread table driver (gets, saves data with google spreadsheet).
+        New instance init for a gspread table source (gets, saves data with google spreadsheet).
 
         Args:
             gc: gspread.Client (authorized/ready)

@@ -108,7 +108,7 @@ class GoogleHelper:
 
         For OAuth mode, refresh token in login credentials may change over time.
         Before each API call it is tested if needs to refresh and if so, it gets refresh.
-        If it does, GoogleSpreadsheetDriver will need a callback to call to update the credentials.
+        If it does, GoogleSheetSource will need a callback to call to update the credentials.
 
         Args:
             filename: path to JSON file. If None, None is returned.

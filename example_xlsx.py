@@ -3,7 +3,7 @@ import logging
 from copy import deepcopy
 from liketable import Liketable
 from table_helper import TableHelper
-from driver_xlsx import XlsxFileDriver
+from source_xlsx import XlsxSource
 
 logging.basicConfig(
     level=logging.INFO,
@@ -11,12 +11,12 @@ logging.basicConfig(
 )
 
 # %%
-table = XlsxFileDriver(filename='./changes.xlsx')
+source = XlsxSource(filename='./changes.xlsx')
 
 w = Liketable(token=open('token.txt').read().strip('\n'), language='en')
 
 # %%
-table_data = table.bulk_read()
+table_data = source.bulk_read()
 
 old_data = deepcopy(table_data)
 
@@ -31,14 +31,14 @@ w.set_ymusic_likes(online_data, table_data)
 
 # %%
 if old_data:
-    table.bulk_update(table_data, cached_old_data=old_data)
+    source.bulk_update(table_data, cached_old_data=old_data)
     print('XLSX file updated')
 
 # %%
 # Alternative: re-create file, with sorting
 if not old_data:
     table_data = TableHelper.sort(table_data)
-    table.bulk_write(table_data)
+    source.bulk_write(table_data)
     old_data = table_data
 
     print('XLSX file was re/created with all current likes.')

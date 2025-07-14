@@ -2,9 +2,9 @@
 import logging
 from typing import ContextManager, List
 
-class DriverBase:
+class Source:
     """
-    Base for table input/output driver. Like XLSX, google, etc.
+    Base for table input/output source. Like XLSX, google, etc.
 
     Provides high-level bulk_read, bulk_write (replace data) and bulk_update.
 
