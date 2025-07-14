@@ -24,10 +24,14 @@ old_data = deepcopy(table_data)
 online_data = w.get_online_data()
 
 # %%
-table_data = w.get_updated_table(online_data, table_data)
+info = w.import_changes(online_data, table_data)
+
+print('Imported likes: ' + ', '.join('%s: %d' % kv for kv in info.items()))
 
 # %%
-w.upload_changed_likes(online_data, table_data)
+info = w.upload_changed_likes(online_data, table_data)
+
+print('Uploaded likes: ' + ', '.join('%s: %d' % kv for kv in info.items()))
 
 # %%
 if old_data:

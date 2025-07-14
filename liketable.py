@@ -1,5 +1,6 @@
 
 import logging
+from typing import Tuple
 from yandex_music import Client
 from datetime import datetime, timezone
 from utility import iso_to_utc_timestamp, iso_to_utc_year
@@ -38,10 +39,12 @@ class Liketable:
             'time': int(now_utc.timestamp()),
         }
  
-    def upload_changed_likes(self, online_data: dict, changes: list):
+    def upload_changed_likes(self, online_data: dict, changes: list) -> dict:
         """
         Apply changes from file to online.
         Set new likes and remove likes from online, according to checkboxes in file.
+
+        Tells some stats.
         """
 
         add_artists = []
@@ -118,37 +121,61 @@ class Liketable:
         logging.info('API to-do:')
         logging.info('\tRemove like: artists %d albums %d tracks %d', len(rm_artists), len(rm_albums), len(rm_tracks))
         logging.info('\tAdd like:    artists %d albums %d tracks %d', len(add_artists), len(add_albums), len(add_tracks))
-        logging.info('API working...')
 
-        if rm_tracks:
-            self.client.users_likes_tracks_remove(track_ids=rm_tracks)
-        if rm_albums:
-            self.client.users_likes_albums_remove(album_ids=rm_albums)
-        if rm_artists:
-            self.client.users_likes_artists_remove(artist_ids=rm_artists)
+        # No need to do anything if no likes to upload
+        if any((rm_tracks, rm_albums, rm_artists, add_tracks, add_albums, add_artists)):
+            logging.info('API working...')
 
-        if add_tracks:
-            self.client.users_likes_tracks_add(track_ids=add_tracks)
-        if add_albums:
-            self.client.users_likes_albums_add(album_ids=add_albums)
-        if add_artists:
-            self.client.users_likes_artists_add(artist_ids=add_artists)
+            if rm_tracks:
+                self.client.users_likes_tracks_remove(track_ids=rm_tracks)
+            if rm_albums:
+                self.client.users_likes_albums_remove(album_ids=rm_albums)
+            if rm_artists:
+                self.client.users_likes_artists_remove(artist_ids=rm_artists)
 
-        logging.info('Table status: like %d not %d', len(on_changes), len(off_changes))
-        logging.info('This indicates no error!')
+            if add_tracks:
+                self.client.users_likes_tracks_add(track_ids=add_tracks)
+            if add_albums:
+                self.client.users_likes_albums_add(album_ids=add_albums)
+            if add_artists:
+                self.client.users_likes_artists_add(artist_ids=add_artists)
 
+            logging.info('Table status: like %d not %d', len(on_changes), len(off_changes))
+            logging.info('This indicates no error!')
 
-    def get_updated_table(self, online_data: dict, changes: list) -> list:
+        return {
+            'set': len(add_tracks + add_albums + add_artists),
+            'unset': len(rm_tracks + rm_albums + rm_artists),
+        }
+
+    def import_changes(self, online_data: dict, changes: list) -> dict:
         """
-        Populate changes with missing information from online_data (new tracks with metadata, or changed like on/off).
-        Fetches missing information plus adds new likes if set from online to the changes file.
-        """
-        num_changed_tracks = 0
-        num_changed_albums = 0
-        num_changed_artists = 0
+        Populate changes with updated information according to the online_data.
+        Changes like_on and timestamps on the changed likes from current data.
+        Appends new likes to the end, if any.
 
-        # Reflect likes removed from Yandex Music
-        num_unliked = 0
+        Returns stats array with counters for unset/change/new
+        """
+        old_len = len(changes)
+
+        # Reflect likes removed from Yandex Music app
+        num_unset = self._import_unset_likes(online_data, changes)
+
+        # Find new likes from Yandex.Music and add to changes
+        state = self._import_new_likes(online_data, changes)
+
+        # Fetch metadata for new items (artist/track names, year, genre, etc)
+        self._import_new_metadata(state, changes)
+        
+        # Tells stats for final changes
+        return {
+            'unset': num_unset,
+            'set': state[0],
+            'new': len(changes) - old_len
+        }
+
+    def _import_unset_likes(self, online_data: dict, changes: list) -> int:
+        num_unset = 0
 
         liked_track_ids = [str(i.id) for i in online_data['tracks']]
         liked_album_ids = [str(i.album.id) for i in online_data['albums']]
@@ -169,13 +196,17 @@ class Liketable:
                 c['like_on'] = False
                 c['timestamp'] = ''
                 c['time'] = 0
-                num_unliked += 1
+                num_unset += 1
 
-        logging.info('Likes unset in table from online: %d', num_unliked)
+        logging.info('Likes unset in table from online: %d', num_unset)
+        return num_unset
 
+    def _import_new_likes(self, online_data: dict, changes: list) -> Tuple:
         new_track_ids = []
         new_album_ids = []
         new_artist_ids = []
+
+        num_set = 0
 
         # Find the most recent timestamp in changes file.
         changes_max_time = 0
@@ -200,14 +231,12 @@ class Liketable:
             c['timestamp'] = i.timestamp
             c['time'] = iso_to_utc_timestamp(i.timestamp)
             return c
-
-        # Reset likes if newer online like, for each track/artist/album
         
         for i in select_newer_online('artists'):
             if not i.artist.id:
                 continue
             if update_changes_where(lambda c: not c['track_id'] and not c['album_id'] and c['artist_id'] == str(i.artist.id), set_like_on, i):
-                num_changed_artists += 1
+                num_set += 1
             else:
                 new_artist_ids.append(i.artist.id)
                 changes.append({
@@ -223,7 +252,7 @@ class Liketable:
             if not i.album.id:
                 continue
             if update_changes_where(lambda c: not c['track_id'] and c['album_id'] == str(i.album.id), set_like_on, i):
-                num_changed_albums += 1
+                num_set += 1
             else:
                 new_album_ids.append(i.album.id)
                 changes.append({
@@ -239,7 +268,7 @@ class Liketable:
             if not i.id:
                 continue
             if update_changes_where(lambda c: c['track_id'] == str(i.id), set_like_on, i):
-                num_changed_tracks += 1
+                num_set += 1
             else:
                 new_track_ids.append(i.id)
                 changes.append({
@@ -251,15 +280,22 @@ class Liketable:
                     'time': iso_to_utc_timestamp(i.timestamp),
                 })
 
-        logging.info('New likes add/set in table:')
-        logging.info('\tartists %d albums %d tracks %d', num_changed_artists, num_changed_albums, num_changed_tracks)
+        logging.info('New likes add/set in table: %d', num_set)
 
-        # Fetch metadata for new items (artist/track names, year, genre, etc)
+        return num_set, new_track_ids, new_album_ids, new_artist_ids
+
+    def _import_new_metadata(self, state: Tuple, changes: list):
+        _, new_track_ids, new_album_ids, new_artist_ids = state
+
+        # No need to do anything if no metadata to request
+        if not any(c for c in state[1:]):
+            return
+
         track_info = {}
         album_info = {}
         artist_info = {}
 
-        logging.info('Fetching metadata for new items')
+        logging.info('API working...')
 
         if new_track_ids:
             data = self.client.tracks(with_positions=False, track_ids=list(set(new_track_ids)))
@@ -321,6 +357,5 @@ class Liketable:
                 if track.version:
                     c['track'] += ' (%s)' % track.version
 
-        return changes
 
 # End
