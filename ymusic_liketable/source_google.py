@@ -2,9 +2,9 @@ import logging
 import gspread
 import gspread.utils
 from typing import List, Union, Dict, Callable
-from source import Source
-from utility import iso_to_utc_timestamp
-from table_helper import TableHelper
+from .source import Source
+from .utility import iso_to_utc_timestamp
+from .table_helper import TableHelper
 from gspread_formatting import DataValidationRule, BooleanCondition, set_data_validation_for_cell_range, set_frozen
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request

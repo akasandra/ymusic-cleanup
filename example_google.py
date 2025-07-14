@@ -1,10 +1,7 @@
 # %%
 import logging
 from copy import deepcopy
-from liketable import Liketable
-from table_helper import TableHelper
-from source_google import GoogleSheetSource
-from google_helper import GoogleHelper
+from ymusic_liketable import Liketable, TableHelper, GoogleSheetSource, GoogleHelper
 
 logging.basicConfig(
     level=logging.INFO,

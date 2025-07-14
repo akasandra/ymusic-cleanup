@@ -3,7 +3,7 @@ import logging
 from typing import Tuple
 from yandex_music import Client
 from datetime import datetime, timezone
-from utility import iso_to_utc_timestamp, iso_to_utc_year
+from .utility import iso_to_utc_timestamp, iso_to_utc_year
 
 class Liketable:
     def __init__(self, token: str, language: str):

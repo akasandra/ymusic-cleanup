@@ -1,8 +1,8 @@
 import os
 from openpyxl import load_workbook, Workbook
-from utility import iso_to_utc_timestamp, strip_trailing_dot_zero, value_to_bool
-from source import Source
-from table_helper import TableHelper
+from .utility import iso_to_utc_timestamp, strip_trailing_dot_zero, value_to_bool
+from .source import Source
+from .table_helper import TableHelper
 
 # ContextManager
 class WorkbookContext:

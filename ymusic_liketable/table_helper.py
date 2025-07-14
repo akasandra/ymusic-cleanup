@@ -1,6 +1,6 @@
 import re
 from typing import List
-from utility import iso_to_utc_timestamp, strip_trailing_dot_zero, value_to_bool
+from .utility import iso_to_utc_timestamp, strip_trailing_dot_zero, value_to_bool
 
 class TableHelper:
     """

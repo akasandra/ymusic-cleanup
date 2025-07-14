@@ -1,5 +1,5 @@
 [tool.poetry]
-name="ymusic_liketable"
+name="ymusic-liketable"
 version = "0.1.0"
 description = ""
 

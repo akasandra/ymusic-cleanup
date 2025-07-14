@@ -1,9 +1,7 @@
 # %%
 import logging
 from copy import deepcopy
-from liketable import Liketable
-from table_helper import TableHelper
-from source_xlsx import XlsxSource
+from ymusic_liketable import Liketable, TableHelper, XlsxSource
 
 logging.basicConfig(
     level=logging.INFO,
