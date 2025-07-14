@@ -704,6 +704,20 @@ google-auth = ">=1.12.0"
 google-auth-oauthlib = ">=0.4.1"
 
 [[package]]
+name = "gspread-formatting"
+version = "1.2.1"
+description = "Complete Google Sheets formatting support for gspread worksheets"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "gspread_formatting-1.2.1-py2.py3-none-any.whl", hash = "sha256:76bef0e751dc276bab666351035f15a818866dea5ca20603a34ae6c847333662"},
+]
+
+[package.dependencies]
+gspread = ">=3.0.0"
+
+[[package]]
 name = "idna"
 version = "3.10"
 description = "Internationalized Domain Names in Applications (IDNA)"
@@ -1818,4 +1832,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.8,<4.0"
-content-hash = "8edee117366faec59e906ca01e4d0716e4d575195187469abe7d4ce585870a81"
+content-hash = "4f00cb4b1c90f7cf595f7331beb6b43dbf5bc250a92349b76a4540f4b3066358"

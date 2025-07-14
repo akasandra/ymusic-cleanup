@@ -2,6 +2,7 @@ import os
 from openpyxl import load_workbook, Workbook
 from utility import iso_to_utc_timestamp, strip_trailing_dot_zero, value_to_bool
 from driver import DriverBase
+from table_helper import TableHelper
 
 # ContextManager
 class WorkbookContext:
@@ -19,7 +20,7 @@ class WorkbookContext:
         # Delegate attribute access to the wrapped workbook
         return getattr(self._wb, name)
 
-class XlsxFileDriver(DriverBase):
+class XlsxFileDriver(DriverBase, TableHelper):
 
     def __init__(self, filename: str):
         self.filename = filename
@@ -72,9 +73,6 @@ class XlsxFileDriver(DriverBase):
         
         ws = wb.active
 
-        if min_row == 2:
-            self.write_header(ws, 1)
-
         # Write the changes
         for i, c in enumerate(changes):
             for column, key in enumerate(columns):
@@ -84,9 +82,5 @@ class XlsxFileDriver(DriverBase):
                 ws.cell(row=min_row+i, column=column+1, value=value)
 
         wb.save(self.filename)
-
-    def write_header(self, ws, row: int):
-        for i, key in enumerate(self.COLUMN_KEYS):
-            ws.cell(row=row, column=i+1, value=key)
 
 # End

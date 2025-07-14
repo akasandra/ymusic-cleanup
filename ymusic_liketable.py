@@ -1,62 +1,25 @@
 
-import re
+import logging
 from yandex_music import Client
 from utility import iso_to_utc_timestamp, iso_to_utc_year
-
-# Allowed characters:
-# - Basic Latin letters (A-Z, a-z)
-# - Latin-1 Supplement letters with accents (À-ÿ, including ñ, á, é, etc.)
-# - Spaces and common punctuation: - ( ) . , & and apostrophe '
-# Note: \u00C0-\u00FF covers Latin-1 Supplement block (accented chars)
-# Apostrophe added as it is common in titles
-NON_LATIN_PATTERN = re.compile(r"[^A-Za-z\u00C0-\u00FF\s\-\(\)\.,&']+")
-
-def is_title_latin(text: str) -> bool:
-    if not text:
-        return False
-    # Return True if no disallowed characters found
-    return not bool(NON_LATIN_PATTERN.search(text))
-
-def is_genre_russian(text: str) -> bool:
-    if not text:
-        return False
-    return 'rus' in text or 'phonk' in text or 'local' in text
 
 class Worker:
     def __init__(self, token: str, language: str):
         self.token = token
         self.client = Client(token, language=language).init()
 
-    def sort_changes(self, changes: list) -> list:
-        """
-        Sorts full list of likes for the output. 
-        To be used externally, only if saving is done with bulk_write manner (not bulk_update) or table saved first time.
-        """
-        return sorted(
-            changes,
-            key=lambda x: (
-                0 if is_genre_russian(x.get('genres', '')) else 1,
-                0 if is_genre_russian(x.get('genre', '')) else 1,
-                1 if is_title_latin(x.get('artist', '')) else 0,
-                x.get('genres'),
-                x.get('artist', '').lower(),
-                0 if not x.get('album_id', '') else 1,
-                0 if not x.get('track_id', '') else 1
-            )
-        )
-
     def get_online_data(self) -> dict:
         """
         Use API to read all liked tracks, albums or artists.
         """
-        print('API working...')
+        logging.info('API working...')
         
         # Get list of all liked
         tracks = self.client.users_likes_tracks()
         albums = self.client.users_likes_albums()
         artists = self.client.users_likes_artists()
 
-        print('Online Likes: artists %d albums %d tracks %d' % (len(artists), len(albums), len(tracks)))
+        logging.info('Online Likes: artists %d albums %d tracks %d', len(artists), len(albums), len(tracks))
 
         # Base sort using timestamps from new to old
         tracks = sorted(tracks, key=lambda item: (item.timestamp, item.album_id), reverse=True)
@@ -155,7 +118,8 @@ class Worker:
                     'time': iso_to_utc_timestamp(i.timestamp),
                 })
 
-        print('New likes add/set in table:\n\tartists %d albums %d tracks %d' % (num_changed_artists, num_changed_albums, num_changed_tracks))
+        logging.info('New likes add/set in table:')
+        logging.info('\tartists %d albums %d tracks %d', num_changed_artists, num_changed_albums, num_changed_tracks)
 
         # Reflect likes removed from Yandex Music
         num_unliked = 0
@@ -181,14 +145,14 @@ class Worker:
                 c['time'] = 0
                 num_unliked += 1
 
-        print('Likes unset in table from online:', num_unliked)
+        logging.info('Likes unset in table from online: %d', num_unliked)
 
         # Fetch metadata for new items (artist/track names, year, genre, etc)
         track_info = {}
         album_info = {}
         artist_info = {}
 
-        print('Fetching metadata for new items')
+        logging.info('Fetching metadata for new items')
 
         if new_track_ids:
             data = self.client.tracks(with_positions=False, track_ids=list(set(new_track_ids)))
@@ -208,7 +172,7 @@ class Worker:
             data = self.client.artists(artist_ids=list(set(new_artist_ids)))
             artist_info = {str(i.id): i for i in data}
 
-        print('New metadata: artists %d albums %d tracks %d' % (len(artist_info), len(album_info), len(track_info)))
+        logging.info('New metadata: artists %d albums %d tracks %d', len(artist_info), len(album_info), len(track_info))
 
         # Substitute changes with the metadata (artist/track names, year, genre, etc) for each element that may need this
         for c in changes:
@@ -297,12 +261,10 @@ class Worker:
                 if not artist:
                     add_artists.append(c['artist_id'])
 
-        print('Summary of likes to change online:')
-        print('\tTotal on ', len(on_changes))
-        print('\tTotal off', len(off_changes))
-        print('\tRemove likes: artists %d albums %d tracks %d' % (len(rm_artists), len(rm_albums), len(rm_tracks)))
-        print('\tAdd likes:    artists %d albums %d tracks %d' % (len(add_artists), len(add_albums), len(add_tracks)))
-        print('API working...')
+        logging.info('API to-do:')
+        logging.info('\tRemove like: artists %d albums %d tracks %d', len(rm_artists), len(rm_albums), len(rm_tracks))
+        logging.info('\tAdd like:    artists %d albums %d tracks %d', len(add_artists), len(add_albums), len(add_tracks))
+        logging.info('API working...')
 
         if rm_tracks:
             self.client.users_likes_tracks_remove(track_ids=rm_tracks)
@@ -318,6 +280,7 @@ class Worker:
         if add_artists:
             self.client.users_likes_artists_add(artist_ids=add_artists)
 
-        print('This indicates no error!')
+        logging.info('Table status: like %d not %d', len(on_changes), len(off_changes))
+        logging.info('This indicates no error!')
 
 # End

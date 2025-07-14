@@ -2,10 +2,11 @@
 import logging
 from copy import deepcopy
 from ymusic_liketable import Worker
+from table_helper import TableHelper
 from driver_xlsx import XlsxFileDriver
 
 logging.basicConfig(
-    level=logging.WARN,
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
@@ -29,6 +30,17 @@ table_data = w.get_updated_table(online_data, table_data)
 w.set_ymusic_likes(online_data, table_data)
 
 # %%
-table_driver.bulk_update(table_data, old_changes=old_data)
+if old_data:
+    table_driver.bulk_update(table_data, cached_old_data=old_data)
+    print('XLSX file updated')
 
-print('XLSX file saved')
+# %%
+# Alternative: re-create file, with sorting
+if not old_data:
+    table_data = TableHelper.sort(table_data)
+    table_driver.bulk_write(table_data)
+    old_data = table_data
+
+    print('XLSX file was re/created with all current likes.')
+
+
