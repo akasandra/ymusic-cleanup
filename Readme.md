@@ -2,7 +2,9 @@
 
 Скрипт для получения таблицы со всеми лайками на музыку. Если снимать галочки в таблице, лайки будут сняты и это позволяет управлять рекомендациями "волны", например.
 
-Позволяет точнее настроить работу рекомендаций/vibe, убрать много лайков за раз
+Позволяет точнее настроить работу рекомендаций/vibe, убрать много лайков за раз или вернуть позже.
+
+<img src="liketable.png" alt="Liketable" style="width:100%;">
 
 ### Использование
 
@@ -21,17 +23,14 @@
 **Example**: `example_xlsx.py`
 
 #### Google Sheets API
-You may use Google Sheets API to work on google cloud spreadsheet document. 
+Можно работать с таблицей [google sheets](https://sheets.google.com/) как хранилещем таблицы, вместо XLSX.
 
-Requirements:
+Что нужно:
 
- - Ath for google API (`creds.json`): Service Account (personal use) or OAuth (many users/apps mode)
- - A spreadsheet document (href for `table_url`) with access shared to `client_email` (creds) 
+ - Создать проект с помощью Google Console (для получения `creds.json`)
+ - Включить в консоли конкретного проекта [Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com)
+ - Скачать JSON с ключем проекта в режиме **Service Account** (as `creds.json`)
+ - Создать гугл таблицу (взять ссылку для `table_url`)
+ - Поделиться таблицей на адрес `client_email` из creds
 
  **Example**: `example_google.py`
-
-##### Set up access
-
-1. Google Console Project
-2. Enable [Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com) per project
-3. Create Credentials and download JSON file (as `creds.json`)
