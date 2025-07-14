@@ -1,4 +1,5 @@
 
+import logging
 from utility import iso_to_utc_timestamp, strip_trailing_dot_zero, value_to_bool
 from typing import ContextManager
 
@@ -83,6 +84,13 @@ class DriverBase:
                     if new['artist_id'] == c['artist_id'] and new['album_id'] == c['album_id'] and new['track_id'] == c['track_id']:
                         return new
 
+            # Aggregate rows that are missing
+            # Ensure not duplicating rows
+            def find_old_entry(c):
+                for old in old_changes:
+                    if all((old[k] == c[k] for k in ['artist_id', 'album_id', 'track_id'])):
+                        yield old
+
             # Update likes on old changes (assume order is consistent)
             num_old_rows = 2 + len(old_changes)
             num_updated = 0
@@ -95,26 +103,19 @@ class DriverBase:
                 # For rows with updated like/timestamp, update the row
                 if c['like_on'] != new['like_on'] or c['time'] != new['time']:
                     num_updated += 1
-                    print('Update row', i+2)
+                    logging.debug('Update row', i+2)
                     self._bulk_write(wb=wb, min_row=2+i, changes=[new], columns=['like_on', 'timestamp'])
 
-            print('Rows updated:', num_updated)
+            logging.debug('Rows updated:', num_updated)
 
             # The rest of changes are new, write to table
             # Write new table rows (assume metadata is present for new_changes)
 
             new_changes = new_changes[len(old_changes):]
 
-            # Aggregate rows that are missing
-            # Ensure not duplicating rows
-            def find_old_entry(c):
-                for old in old_changes:
-                    if all((old[k] == c[k] for k in ['artist_id', 'album_id', 'track_id'])):
-                        yield old
-
             new_changes = [c for c in new_changes if not any(find_old_entry(c))]
 
             self._bulk_write(wb=wb, min_row=num_old_rows, changes=new_changes, columns=self.COLUMN_KEYS)
-            print('Rows added:', len(new_changes))
+            logging.debug('Rows added:', len(new_changes))
 
 # End
