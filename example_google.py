@@ -54,7 +54,6 @@ if old_data:
     print('Google sheets data updated')
 
 # %%
-# Alternative: re-create file, with sorting
 if not old_data:
     table_data = TableHelper.sort(table_data)
     source.bulk_write(table_data)

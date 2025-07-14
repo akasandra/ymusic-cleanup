@@ -83,23 +83,6 @@ class GoogleSheetSource(Source, TableHelper):
         wb.sheet1.clear()
 
         return SpreadsheetContext(wb)
-    
-    def write_header(self, wb, row: int):
-        super().write_header(wb, row)
-
-        sh = wb.sheet1
-
-        logging.info('Create spreadsheet header row and checkbox column')
-
-        # Define the checkbox data validation rule to make checkbox column
-        checkbox_rule = DataValidationRule(
-            BooleanCondition('BOOLEAN', ['TRUE', 'FALSE']),
-            showCustomUi=True
-        )
-        set_data_validation_for_cell_range(sh, f'A{row+1}:A', checkbox_rule)
-
-        # Header row always visible
-        set_frozen(sh, rows=row)
 
     def _open_update(self):
         # For OAuth credentials, update refresh token if needed before using the API
@@ -149,6 +132,23 @@ class GoogleSheetSource(Source, TableHelper):
                 break
             
             yield c
+    
+    def write_header(self, wb, row: int):
+        super().write_header(wb, row)
+
+        sh = wb.sheet1
+
+        logging.info('Create spreadsheet header row and checkbox column')
+
+        # Define the checkbox data validation rule to make checkbox column
+        checkbox_rule = DataValidationRule(
+            BooleanCondition('BOOLEAN', ['TRUE', 'FALSE']),
+            showCustomUi=True
+        )
+        set_data_validation_for_cell_range(sh, f'A{row+1}:A', checkbox_rule)
+
+        # Header row always visible
+        set_frozen(sh, rows=row)
 
     def _bulk_write(self, wb, min_row: int, changes: list, columns: list):
         """
@@ -178,8 +178,8 @@ class GoogleSheetSource(Source, TableHelper):
             desired_cols = worksheet.col_count
             worksheet.resize(rows=desired_rows, cols=desired_cols)
 
-        logging.debug('Min row', min_row)
-        logging.debug('data len', len(data))
+        logging.debug('Min row=%d', min_row)
+        logging.debug('data len=%d', len(data))
 
         if data:
             worksheet.update_cells(data)
