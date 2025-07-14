@@ -27,7 +27,7 @@ online_data = w.get_online_data()
 table_data = w.get_updated_table(online_data, table_data)
 
 # %%
-w.set_ymusic_likes(online_data, table_data)
+w.upload_changed_likes(online_data, table_data)
 
 # %%
 if old_data:

@@ -37,10 +37,110 @@ class Liketable:
             'timestamp': now_utc.isoformat(),
             'time': int(now_utc.timestamp()),
         }
+ 
+    def upload_changed_likes(self, online_data: dict, changes: list):
+        """
+        Apply changes from file to online.
+        Set new likes and remove likes from online, according to checkboxes in file.
+        """
+
+        add_artists = []
+        add_albums = []
+        add_tracks = []
+
+        rm_artists = []
+        rm_albums = []
+        rm_tracks = []
+
+        off_changes = [c for c in changes if not c['like_on']]
+        on_changes = [c for c in changes if c['like_on']]
+
+        for c in off_changes:
+
+            if c.get('track_id'):
+                track = next((t for t in online_data['tracks'] if str(t.id) == c['track_id']), None)
+                if not track:
+                    continue
+
+                rm_tracks.append(c['track_id'])
+
+            elif c.get('album_id'):
+                album = next((a for a in online_data['albums'] if str(a.album.id) == str(c['album_id'])), None)
+                if not album:
+                    continue
+                
+                rm_albums.append(c['album_id'])
+
+            elif c.get('artist_id'):
+                artist = next((a for a in online_data['artists'] if str(a.artist.id) == c['artist_id']), None)
+                if not artist:
+                    continue
+                
+                rm_artists.append(c['artist_id'])
+
+            else:
+                continue
+
+            # Clear timestamp so that we know from table, like is confirmed to be unset
+            c.update({
+                'time': 0,
+                'timestamp': ''
+            })
+
+        for c in on_changes:
+            if c.get('track_id'):
+                if any(t for t in online_data['tracks'] if str(t.id) == c['track_id']):
+                    continue
+                
+                add_tracks.append(c['track_id'])
+
+            elif c.get('album_id'):
+                if any(a for a in online_data['albums'] if str(a.album.id) == str(c['album_id'])):
+                    continue
+
+                add_albums.append(c['album_id'])
+
+            elif c.get('artist_id'):
+                if any(a for a in online_data['artists'] if str(a.artist.id) == c['artist_id']):
+                    continue
+                
+                add_artists.append(c['artist_id'])
+
+            else:
+                continue
+
+            # Approximate the real then-API timestamp and reflect in the new table data
+            c.update({
+                'time': online_data['time'],
+                'timestamp': online_data['timestamp']
+            })
+
+        logging.info('API to-do:')
+        logging.info('\tRemove like: artists %d albums %d tracks %d', len(rm_artists), len(rm_albums), len(rm_tracks))
+        logging.info('\tAdd like:    artists %d albums %d tracks %d', len(add_artists), len(add_albums), len(add_tracks))
+        logging.info('API working...')
+
+        if rm_tracks:
+            self.client.users_likes_tracks_remove(track_ids=rm_tracks)
+        if rm_albums:
+            self.client.users_likes_albums_remove(album_ids=rm_albums)
+        if rm_artists:
+            self.client.users_likes_artists_remove(artist_ids=rm_artists)
+
+        if add_tracks:
+            self.client.users_likes_tracks_add(track_ids=add_tracks)
+        if add_albums:
+            self.client.users_likes_albums_add(album_ids=add_albums)
+        if add_artists:
+            self.client.users_likes_artists_add(artist_ids=add_artists)
+
+        logging.info('Table status: like %d not %d', len(on_changes), len(off_changes))
+        logging.info('This indicates no error!')
+
 
     def get_updated_table(self, online_data: dict, changes: list) -> list:
         """
-        Populate changes with missing information from online_data (new tracks, changed info).
+        Populate changes with missing information from online_data (new tracks with metadata, or changed like on/off).
         Fetches missing information plus adds new likes if set from online to the changes file.
         """
         num_changed_tracks = 0
@@ -222,104 +322,5 @@ class Liketable:
                     c['track'] += ' (%s)' % track.version
 
         return changes
-
-    def set_ymusic_likes(self, online_data: dict, changes: list):
-        """
-        Apply changes from file to online.
-        Set new likes and remove likes from online, according to checkboxes in file.
-        """
-
-        add_artists = []
-        add_albums = []
-        add_tracks = []
-
-        rm_artists = []
-        rm_albums = []
-        rm_tracks = []
-
-        off_changes = [c for c in changes if not c['like_on']]
-        on_changes = [c for c in changes if c['like_on']]
-
-        for c in off_changes:
-
-            if c.get('track_id'):
-                track = next((t for t in online_data['tracks'] if str(t.id) == c['track_id']), None)
-                if not track:
-                    continue
-
-                rm_tracks.append(c['track_id'])
-
-            elif c.get('album_id'):
-                album = next((a for a in online_data['albums'] if str(a.album.id) == str(c['album_id'])), None)
-                if not album:
-                    continue
-                
-                rm_albums.append(c['album_id'])
-
-            elif c.get('artist_id'):
-                artist = next((a for a in online_data['artists'] if str(a.artist.id) == c['artist_id']), None)
-                if not artist:
-                    continue
-                
-                rm_artists.append(c['artist_id'])
-
-            else:
-                continue
-
-            # Clear timestamp so that we know from table, like is confirmed to be unset
-            c.update({
-                'time': 0,
-                'timestamp': ''
-            })
-
-        for c in on_changes:
-            if c.get('track_id'):
-                if any(t for t in online_data['tracks'] if str(t.id) == c['track_id']):
-                    continue
-                
-                add_tracks.append(c['track_id'])
-
-            elif c.get('album_id'):
-                if any(a for a in online_data['albums'] if str(a.album.id) == str(c['album_id'])):
-                    continue
-
-                add_albums.append(c['album_id'])
-
-            elif c.get('artist_id'):
-                if any(a for a in online_data['artists'] if str(a.artist.id) == c['artist_id']):
-                    continue
-                
-                add_artists.append(c['artist_id'])
-
-            else:
-                continue
-
-            # Approximate the real then-API timestamp and reflect in the new table data
-            c.update({
-                'time': online_data['time'],
-                'timestamp': online_data['timestamp']
-            })
-
-        logging.info('API to-do:')
-        logging.info('\tRemove like: artists %d albums %d tracks %d', len(rm_artists), len(rm_albums), len(rm_tracks))
-        logging.info('\tAdd like:    artists %d albums %d tracks %d', len(add_artists), len(add_albums), len(add_tracks))
-        logging.info('API working...')
-
-        if rm_tracks:
-            self.client.users_likes_tracks_remove(track_ids=rm_tracks)
-        if rm_albums:
-            self.client.users_likes_albums_remove(album_ids=rm_albums)
-        if rm_artists:
-            self.client.users_likes_artists_remove(artist_ids=rm_artists)
-
-        if add_tracks:
-            self.client.users_likes_tracks_add(track_ids=add_tracks)
-        if add_albums:
-            self.client.users_likes_albums_add(album_ids=add_albums)
-        if add_artists:
-            self.client.users_likes_artists_add(artist_ids=add_artists)
-
-        logging.info('Table status: like %d not %d', len(on_changes), len(off_changes))
-        logging.info('This indicates no error!')
 
 # End
